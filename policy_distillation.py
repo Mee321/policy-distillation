@@ -58,7 +58,7 @@ def main(args):
     ray.init(num_cpus=args.num_workers, num_gpus=1)
     # policy and envs for sampling
     teacher_policies = []
-    env.seed(args.seed)
+    np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     # load saved models if args.load_models
     if args.load_models:
