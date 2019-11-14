@@ -134,3 +134,18 @@ class AgentCollection:
         # log['action_min'] = np.min(np.vstack(batch.action), axis=0)
         # log['action_max'] = np.max(np.vstack(batch.action), axis=0)
         return worker_memories, worker_logs
+
+    def get_expert_sample(self, batch_size):
+        memories, logs = self.collect_samples(batch_size)
+        teacher_rewards = [log['avg_reward'] for log in logs if log is not None]
+        teacher_average_reward = np.array(teacher_rewards).mean()
+        # TODO better implementation of dataset and sampling
+        # construct training dataset containing pairs {X:state, Y:output of teacher policy}
+        dataset = []
+        for memory, policy in zip(memories, self.policies):
+            batch = memory.sample()
+            states = torch.from_numpy(np.stack(batch.state)).to(torch.double).to('cpu')
+            means = policy.mean_action(states).detach()
+            stds = policy.get_std(states).detach()
+            dataset += [(state, mean, std) for state, mean, std in zip(states, means, stds)]
+        return dataset, teacher_average_reward

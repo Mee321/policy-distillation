@@ -35,25 +35,6 @@ def test(test_env, test_policy, teacher_reward):
     average_reward = np.array(rewards).mean()
     print("Students_average_reward: {:.3f} (teacher_reaward:{:3f})".format(teacher_reward, average_reward))
 
-def get_expert_sample(agents, policies):
-    time_begin = time()
-    print('Sampling expert data, batch size is {}...'.format(args.sample_batch_size))
-    memories, logs = agents.collect_samples(args.sample_batch_size)
-    teacher_rewards = [log['avg_reward'] for log in logs if log is not None]
-    teacher_average_reward = np.array(teacher_rewards).mean()
-    time_sample = time() - time_begin
-    print('Sampling expert data finished, using time {}'.format(time_sample))
-    # TODO better implementation of dataset and sampling
-    # construct training dataset containing pairs {X:state, Y:output of teacher policy}
-    dataset = []
-    for memory, policy in zip(memories, policies):
-        batch = memory.sample()
-        states = torch.from_numpy(np.stack(batch.state)).to(dtype).to(device)
-        means = policy.mean_action(states).detach()
-        stds = policy.get_std(states).detach()
-        dataset += [(state, mean, std) for state, mean, std in zip(states, means, stds)]
-    return dataset, teacher_average_reward
-
 def main(args):
     ray.init(num_cpus=args.num_workers, num_gpus=1)
     # policy and envs for sampling
@@ -101,9 +82,9 @@ def main(args):
     print('Training student policy...')
     time_beigin = time()
     # train student policy
-    for iter in count(0):
-        if iter % args.sample_interval == 0:
-            expert_data, expert_reward = get_expert_sample(agents, teacher_policies)
+    for iter in count(1):
+        if iter % args.sample_interval == 1:
+            expert_data, expert_reward = agents.get_expert_sample(args.sample_batch_size)
         batch = random.sample(expert_data, args.student_batch_size)
         states = torch.stack([x[0] for x in batch])
         means_teacher = torch.stack([x[1] for x in batch])
@@ -117,7 +98,7 @@ def main(args):
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        print('Episode{} {} loss: {:.2f}'.format(iter, args.loss_metric, loss.data))
+        print('Itr {} {} loss: {:.2f}'.format(iter, args.loss_metric, loss.data))
         if iter % args.test_interval == 0:
             test(env, student_policy, expert_reward)
         if iter > args.num_student_episodes:
