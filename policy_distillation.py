@@ -1,5 +1,5 @@
 from itertools import count
-from time import time
+from time import time, strftime, localtime
 import gym
 import scipy.optimize
 from tensorboardX import SummaryWriter
@@ -27,13 +27,13 @@ torch.set_default_dtype(dtype)
 3. use KL or W2 distance as metric to train student policy
 4. test student policy
 '''
-def test(test_env, test_policy, teacher_reward):
+def test(test_env, test_policy):
     student_agent = AgentCollection([test_env], [test_policy], 'cpu', running_state=None, render=args.render,
                                     num_agents=1, num_parallel_workers=1)
     memories, logs = student_agent.collect_samples(args.testing_batch_size)
     rewards = [log['avg_reward'] for log in logs]
     average_reward = np.array(rewards).mean()
-    print("Students_average_reward: {:.3f} (teacher_reaward:{:3f})".format(teacher_reward, average_reward))
+    return average_reward
 
 def main(args):
     ray.init(num_cpus=args.num_workers, num_gpus=1)
@@ -41,6 +41,8 @@ def main(args):
     teacher_policies = []
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
+    exp_date = strftime('%Y.%m.%d', localtime(time()))
+    writer = SummaryWriter(log_dir='./exp_data/{}/{}'.format(exp_date, time()))
     # load saved models if args.load_models
     if args.load_models:
         # TODO save and load envs, incorrect for non-iid env
@@ -98,9 +100,13 @@ def main(args):
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+        writer.add_scalar('{} loss'.format(args.loss_metric), loss.data, iter)
         print('Itr {} {} loss: {:.2f}'.format(iter, args.loss_metric, loss.data))
         if iter % args.test_interval == 0:
-            test(env, student_policy, expert_reward)
+            average_reward = test(env, student_policy)
+            writer.add_scalar('Students_average_reward', average_reward, iter)
+            writer.add_scalar('teacher_reaward', expert_reward, iter)
+            print("Students_average_reward: {:.3f} (teacher_reaward:{:3f})".format(average_reward, expert_reward))
         if iter > args.num_student_episodes:
             break
     time_train = time() - time_beigin

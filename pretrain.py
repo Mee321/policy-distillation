@@ -155,7 +155,7 @@ def main(args):
             print('Episode {}. Average reward {:.2f}'.format(
                 i_episode, average_reward))
             writer.add_scalar("Avg_return", average_reward, i_episode*args.agent_count*batch_size)
-        if i_episode > 200:
+        if i_episode > 300:
             break
     file_path = './pretrained_models/{}'.format(args.env_name)
     if not os.path.exists(file_path):
