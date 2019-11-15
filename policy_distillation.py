@@ -7,13 +7,13 @@ from core.models import *
 from core.agent_ray_pd import AgentCollection
 from utils.utils import *
 import numpy as np
-import random
-from torch.distributions.kl import kl_divergence
 import ray
 import envs
 from trpo import trpo
-from utils2.math import get_kl, get_wasserstein
+from student import Student
+from teacher import Teacher
 import os
+import pickle
 
 torch.utils.backcompat.broadcast_warning.enabled = True
 torch.utils.backcompat.keepdim_warning.enabled = True
@@ -27,91 +27,75 @@ torch.set_default_dtype(dtype)
 3. use KL or W2 distance as metric to train student policy
 4. test student policy
 '''
-def test(test_env, test_policy):
-    student_agent = AgentCollection([test_env], [test_policy], 'cpu', running_state=None, render=args.render,
-                                    num_agents=1, num_parallel_workers=1)
-    memories, logs = student_agent.collect_samples(args.testing_batch_size)
-    rewards = [log['avg_reward'] for log in logs]
-    average_reward = np.array(rewards).mean()
-    return average_reward
+
+def train_teachers():
+    envs = []
+    teacher_policies = []
+    time_begin = time()
+    print('Training {} teacher policies...'.format(args.num_teachers))
+    for i in range(args.num_teachers):
+        print('Training no.{} teacher policy...'.format(i + 1))
+        env = gym.make(args.env_name)
+        envs.append(env)
+        teacher_policies.append(trpo(env, args))
+    time_pretrain = time() - time_begin
+    print('Training teacher is done, using time {}'.format(time_pretrain))
+    return envs, teacher_policies
 
 def main(args):
     ray.init(num_cpus=args.num_workers, num_gpus=1)
     # policy and envs for sampling
-    teacher_policies = []
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     exp_date = strftime('%Y.%m.%d', localtime(time()))
-    writer = SummaryWriter(log_dir='./exp_data/{}/{}'.format(exp_date, time()))
+    writer = SummaryWriter(log_dir='./exp_data/{}/{}_{}'.format(exp_date, args.env_name, time()))
     # load saved models if args.load_models
     if args.load_models:
-        # TODO save and load envs, incorrect for non-iid env
-        envs = [gym.make(args.env_name) for _ in range(args.num_teachers)]
+        envs = []
+        teacher_policies = []
         dummy_env = gym.make(args.env_name)
         num_inputs = dummy_env.observation_space.shape[0]
         num_actions = dummy_env.action_space.shape[0]
         for i in range(args.num_teachers):
+            # load envs
+            env_path = './pretrained_models/{}_{}.pkl'.format(args.env_name, i)
+            if not os.path.isfile(env_path):
+                env_path = './pretrained_models/{}.pkl'.format(args.env_name)
+            with open(env_path, 'rb') as input:
+                env = pickle.load(input)
+            # load policies
             model = Policy(num_inputs, num_actions, hidden_sizes=(args.hidden_size,) * args.num_layers)
-            file_path = '/pretrained_models/{}_pretrain_{}.pth.tar'.format(args.env_name, i)
+            file_path = './pretrained_models/{}_pretrain_{}.pth.tar'.format(args.env_name, i)
             if os.path.isfile(file_path):
                 pretrained_model = torch.load(file_path)
             else:
                 pretrained_model = torch.load('./pretrained_models/{}_pretrain.pth.tar'.format(args.env_name))
             model.load_state_dict(pretrained_model['state_dict'])
+            envs.append(env)
             teacher_policies.append(model)
     else:
-        envs = []
-        time_begin = time()
-        print('Training {} teacher policies...'.format(args.num_teachers))
-        for i in range(args.num_teachers):
-            print('Training no.{} teacher policy...'.format(i+1))
-            env = gym.make(args.env_name)
-            envs.append(env)
-            teacher_policies.append(trpo(env, args))
-        time_pretrain = time() - time_begin
-        print('Training teacher is done, using time {}'.format(time_pretrain))
+        envs, teacher_policies = train_teachers()
 
-    # agents for sampling
-    agents = AgentCollection(envs, teacher_policies, 'cpu', running_state=None, render=args.render,
-                             num_agents=args.agent_count, num_parallel_workers=args.num_workers)
-    # Create the student policy
-    env = gym.make(args.env_name)
-    num_inputs = env.observation_space.shape[0]
-    num_actions = env.action_space.shape[0]
-    student_policy = Policy(num_inputs, num_actions, hidden_sizes=(args.hidden_size,) * args.num_layers)
-
-    optimizer = torch.optim.Adam(student_policy.parameters())
+    teachers = Teacher(envs, teacher_policies, args)
+    student = Student(args)
     print('Training student policy...')
     time_beigin = time()
     # train student policy
     for iter in count(1):
         if iter % args.sample_interval == 1:
-            expert_data, expert_reward = agents.get_expert_sample(args.sample_batch_size)
-        batch = random.sample(expert_data, args.student_batch_size)
-        states = torch.stack([x[0] for x in batch])
-        means_teacher = torch.stack([x[1] for x in batch])
-        stds_teacher = torch.stack([x[2] for x in batch])
-        means_student = student_policy.mean_action(states)
-        stds_student = student_policy.get_std(states)
-        if args.loss_metric is 'kl':
-            loss = get_kl([means_teacher, stds_teacher], [means_student, stds_student])
-        elif args.loss_metric is 'w2':
-            loss = get_wasserstein([means_teacher, stds_teacher], [means_student, stds_student])
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+            expert_data, expert_reward = teachers.get_expert_sample()
+        loss = student.train(expert_data)
         writer.add_scalar('{} loss'.format(args.loss_metric), loss.data, iter)
         print('Itr {} {} loss: {:.2f}'.format(iter, args.loss_metric, loss.data))
         if iter % args.test_interval == 0:
-            average_reward = test(env, student_policy)
+            average_reward = student.test()
             writer.add_scalar('Students_average_reward', average_reward, iter)
-            writer.add_scalar('teacher_reaward', expert_reward, iter)
+            writer.add_scalar('teacher_reward', expert_reward, iter)
             print("Students_average_reward: {:.3f} (teacher_reaward:{:3f})".format(average_reward, expert_reward))
         if iter > args.num_student_episodes:
             break
     time_train = time() - time_beigin
     print('Training student policy finished, using time {}'.format(time_train))
-
 
 if __name__ == '__main__':
     import argparse
@@ -174,7 +158,7 @@ if __name__ == '__main__':
                         help='batch size for testing student policy (default: 10000)')
     parser.add_argument('--num-student-episodes', type=int, default=1000, metavar='N',
                         help='num of teacher training episodes (default: 1000)')
-    parser.add_argument('--loss_metric', type=str, default='kl',
+    parser.add_argument('--loss-metric', type=str, default='kl',
                         help='metric to build student objective')
     args = parser.parse_args()
 
