@@ -2,11 +2,10 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="ebb8b1db-d590-4d49-b521-c798395eadc0" name="Default Changelist" comment="">
-      <change afterPath="$PROJECT_DIR$/student.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/teacher.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/policy_distillation.py" beforeDir="false" afterPath="$PROJECT_DIR$/policy_distillation.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/pretrain.py" beforeDir="false" afterPath="$PROJECT_DIR$/pretrain.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/student.py" beforeDir="false" afterPath="$PROJECT_DIR$/student.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/utils2/math.py" beforeDir="false" afterPath="$PROJECT_DIR$/utils2/math.py" afterDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="SHOW_DIALOG" value="false" />
@@ -151,7 +150,7 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1573648403860</updated>
-      <workItem from="1573648404981" duration="35217000" />
+      <workItem from="1573648404981" duration="43747000" />
     </task>
     <servers />
   </component>

@@ -65,7 +65,7 @@ def main(args):
                 env = pickle.load(input)
             # load policies
             model = Policy(num_inputs, num_actions, hidden_sizes=(args.hidden_size,) * args.num_layers)
-            file_path = './pretrained_models/{}_pretrain_{}.pth.tar'.format(args.env_name, i)
+            file_path = './pretrained_models/{}_{}_pretrain.pth.tar'.format(args.env_name, i)
             if os.path.isfile(file_path):
                 pretrained_model = torch.load(file_path)
             else:
@@ -84,7 +84,10 @@ def main(args):
     for iter in count(1):
         if iter % args.sample_interval == 1:
             expert_data, expert_reward = teachers.get_expert_sample()
-        loss = student.train(expert_data)
+        if args.npg:
+            loss = student.npg_train(expert_data)
+        else:
+            loss = student.train(expert_data)
         writer.add_scalar('{} loss'.format(args.loss_metric), loss.data, iter)
         print('Itr {} {} loss: {:.2f}'.format(iter, args.loss_metric, loss.data))
         if iter % args.test_interval == 0:
@@ -160,6 +163,8 @@ if __name__ == '__main__':
                         help='num of teacher training episodes (default: 1000)')
     parser.add_argument('--loss-metric', type=str, default='kl',
                         help='metric to build student objective')
+    parser.add_argument('--npg', action='store_true',
+                        help='use natural gradient method')
     args = parser.parse_args()
 
     main(args)

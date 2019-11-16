@@ -25,3 +25,4 @@ def get_wasserstein(teacher_dist_info, student_dist_info):
     means_s, stds_s = student_dist_info
     return torch.sum((means_s - means_t) ** 2) + torch.sum(stds_t + stds_s) - 2 * torch.sum(
         torch.sqrt(stds_t * stds_s))
+
