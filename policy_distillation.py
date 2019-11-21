@@ -84,8 +84,13 @@ def main(args):
     for iter in count(1):
         if iter % args.sample_interval == 1:
             expert_data, expert_reward = teachers.get_expert_sample()
-        if args.npg:
+        if args.algo == 'npg':
             loss = student.npg_train(expert_data)
+        elif args.algo == 'storm':
+            if iter == 1:
+                loss, prev_params, prev_grad, direction = student.storm_train(None, None, None, expert_data, iter)
+            else:
+                loss, prev_params, prev_grad, direction = student.storm_train(prev_params, prev_grad, direction, expert_data, iter)
         else:
             loss = student.train(expert_data)
         writer.add_scalar('{} loss'.format(args.loss_metric), loss.data, iter)
@@ -126,7 +131,7 @@ if __name__ == '__main__':
     parser.add_argument('--num-teachers', type=int, default=1, metavar='N',
                         help='number of teacher policies (default: 1)')
     parser.add_argument('--max-kl', type=float, default=1e-2, metavar='G',
-                        help='max kl value (default: 1e-1)')
+                        help='max kl value (default: 1e-2)')
     parser.add_argument('--cg-damping', type=float, default=1e-2, metavar='G',
                         help='damping for conjugate gradient (default: 1e-2)')
     parser.add_argument('--cg-iter', type=int, default=10, metavar='G',
@@ -163,8 +168,8 @@ if __name__ == '__main__':
                         help='num of teacher training episodes (default: 1000)')
     parser.add_argument('--loss-metric', type=str, default='kl',
                         help='metric to build student objective')
-    parser.add_argument('--npg', action='store_true',
-                        help='use natural gradient method')
+    parser.add_argument('--algo', type=str, default='sgd',
+                        help='update method')
     args = parser.parse_args()
 
     main(args)
