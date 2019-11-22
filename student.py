@@ -23,7 +23,7 @@ class Student(object):
                                         num_agents=1, num_parallel_workers=1)
         if not optimizer:
             self.optimizer = SGD(self.policy.parameters(), lr=args.lr)
-        if args.algo is 'storm':
+        if args.algo == 'storm':
             self.init_alpha = args.init_alpha
             self.backup_polciy = deepcopy(self.policy)
             self.lr = args.lr
@@ -106,10 +106,11 @@ class Student(object):
         elif self.loss_metric == 'wasserstein':
             loss = get_wasserstein([means_teacher, stds_teacher], [means_student, stds_student])
         grad = torch.autograd.grad(loss, self.policy.parameters())
+        grad = flat(grad)
         a = np.random.uniform(0,1)
         cur_param = get_flat_params_from(self.policy)
 
-        if episode % self.storm_interval == 0:
+        if (episode - 1) % self.storm_interval == 0:
             direction = grad / torch.norm(grad)
         else:
             # params for computing Hessian vector product
@@ -122,8 +123,10 @@ class Student(object):
             elif self.loss_metric == 'wasserstein':
                 h_loss = get_wasserstein([means_teacher, stds_teacher], [h_means_student, h_stds_student])
             h_grad = torch.autograd.grad(h_loss, self.backup_polciy.parameters(), create_graph=True)
+            h_grad = flat(h_grad)
             grad_v = torch.dot(h_grad, dt)
             h_v = torch.autograd.grad(grad_v, self.backup_polciy.parameters())
+            h_v = flat(h_v)
             direction = (1 - alpha) * prev_grad + alpha * grad + (1 - alpha) * h_v
             direction = direction / torch.norm(direction)
 

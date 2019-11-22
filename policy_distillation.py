@@ -170,6 +170,10 @@ if __name__ == '__main__':
                         help='metric to build student objective')
     parser.add_argument('--algo', type=str, default='sgd',
                         help='update method')
+    parser.add_argument('--storm-interval', type=int, default=10, metavar='N',
+                        help='frequency of storm (default: 10)')
+    parser.add_argument('--init-alpha', type=float, default=1.0, metavar='G',
+                        help='storm init alpha (default: 1.0)')
     args = parser.parse_args()
 
     main(args)
