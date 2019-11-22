@@ -111,7 +111,7 @@ class Student(object):
         cur_param = get_flat_params_from(self.policy)
 
         if (episode - 1) % self.storm_interval == 0:
-            direction = grad / torch.norm(grad)
+            direction = grad
         else:
             # params for computing Hessian vector product
             h_param = a * prev_param + (1 - a) * prev_param
@@ -128,12 +128,11 @@ class Student(object):
             h_v = torch.autograd.grad(grad_v, self.backup_polciy.parameters())
             h_v = flat(h_v)
             direction = (1 - alpha) * prev_grad + alpha * grad + (1 - alpha) * h_v
-            direction = direction / torch.norm(direction)
 
         updated_pamras = cur_param - self.lr * direction
         set_flat_params_to(self.policy, updated_pamras)
 
-        return loss, cur_param, grad, direction
+        return loss, cur_param.detach(), grad.detach(), direction.detach()
 
 
 def cg(mvp, b, nsteps, residual_tol=1e-10):
